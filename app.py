@@ -358,13 +358,16 @@ def stt_worker():
     print("="*60 + "\n")
     state.stt_running = True
     
-    summary_content = read_local_summary_file(MEETING_SUMMARY_FILE_PATH)
+    # ★修正：画面表示と同じドラフトを参照
+    draft_content = load_draft_markdown()
+    if not draft_content:
+        draft_content = generate_meeting_transcript()
+        save_draft_markdown(draft_content)
+    
     base_system = """
 あなたは、議事録修正モードの**AIアシスタント**です。
-ユーザーからの質問や修正リクエストに対してのみ応答してください。
+以下の議事録ドラフトに基づいて、ユーザーからの修正リクエストに応答してください。
 ユーザーからの指示がない限り、発言してはいけません。
-"""
-    final_system = base_system + f"\n\n【議事録ログ】\n{summary_content}"
     
     state.chat_session = state.gemini_client.chats.create(
         model='gemini-2.5-flash-preview-05-20',
