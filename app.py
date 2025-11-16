@@ -183,6 +183,77 @@ def serve_preview(filename="index.html"):
                 # 選択検知スクリプトを注入(既にない場合のみ)
                 selection_script = """
 <script>
+// より正確なセレクタを生成する関数
+function generateUniqueSelector(element) {
+    if (!element) return '';
+
+    // IDがある場合はIDを優先
+    if (element.id) {
+        return '#' + element.id;
+    }
+
+    // ユニークなクラスの組み合わせを試す
+    if (element.className && typeof element.className === 'string') {
+        const classes = element.className.trim().split(/\\s+/);
+        if (classes.length > 0) {
+            const classSelector = element.tagName.toLowerCase() + '.' + classes.join('.');
+            const matches = document.querySelectorAll(classSelector);
+            if (matches.length === 1) {
+                return classSelector;
+            }
+        }
+    }
+
+    // nth-childを使って特定
+    const parent = element.parentElement;
+    if (parent) {
+        const siblings = Array.from(parent.children);
+        const index = siblings.indexOf(element) + 1;
+        const parentSelector = generateUniqueSelector(parent);
+
+        if (parentSelector) {
+            return parentSelector + ' > ' + element.tagName.toLowerCase() + ':nth-child(' + index + ')';
+        }
+    }
+
+    // フォールバック: タグ名のみ
+    return element.tagName.toLowerCase();
+}
+
+// 選択されたテキストを確実に含む要素を見つける関数
+function findElementContainingText(startElement, searchText) {
+    let element = startElement;
+
+    // 最大5階層まで親をたどる
+    for (let i = 0; i < 5; i++) {
+        if (!element) break;
+
+        const elementText = element.textContent || '';
+        if (elementText.includes(searchText)) {
+            // この要素がテキストを含む最小の要素かチェック
+            const children = Array.from(element.children);
+            let foundInChild = false;
+
+            for (const child of children) {
+                const childText = child.textContent || '';
+                if (childText.includes(searchText)) {
+                    foundInChild = true;
+                    element = child;
+                    break;
+                }
+            }
+
+            if (!foundInChild) {
+                return element;
+            }
+        } else {
+            break;
+        }
+    }
+
+    return startElement;
+}
+
 // 親ウィンドウに選択情報を送信
 document.addEventListener('mouseup', function() {
     setTimeout(function() {
@@ -191,12 +262,13 @@ document.addEventListener('mouseup', function() {
         if (text && text.length > 0) {
             const range = selection.getRangeAt(0);
             const container = range.commonAncestorContainer;
-            const element = container.nodeType === 3 ? container.parentElement : container;
+            let element = container.nodeType === 3 ? container.parentElement : container;
 
-            // セレクタを生成
-            let selector = element.tagName.toLowerCase();
-            if (element.id) selector += '#' + element.id;
-            if (element.className) selector += '.' + element.className.split(' ').join('.');
+            // テキストを確実に含む要素を見つける
+            element = findElementContainingText(element, text);
+
+            // より正確なセレクタを生成
+            const selector = generateUniqueSelector(element);
 
             window.parent.postMessage({
                 type: 'text-selected',
